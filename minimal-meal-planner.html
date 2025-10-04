@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Meal Planner with Sections & Shopping List</title>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Roboto', sans-serif; margin:0; background:#f5f5f5; }
+    .container { display: grid; grid-template-columns: 1.5fr 2fr 1fr; height: 100vh; gap:10px; padding:10px; }
+    .column { border-radius:8px; background:#fff; padding:15px; overflow:auto; box-shadow:0 2px 6px rgba(0,0,0,0.1); }
+    h2 { margin-top:0; font-weight:500; color:#333; }
+    ul { list-style:none; padding:0; min-height:30px; }
+    li { padding:6px 8px; margin:4px 0; background:#e0f7fa; cursor:grab; border-radius:4px; display:flex; justify-content:space-between; align-items:center; }
+    li:hover { background:#b2ebf2; }
+    .day { border:1px solid #ddd; margin-bottom:10px; padding:8px; border-radius:6px; background:#fafafa; }
+    .slot { border:1px dashed #bbb; min-height:40px; padding:6px; margin:6px 0; border-radius:4px; background:#f0f0f0; transition:background 0.2s; }
+    .slot.over { background:#d0f0fd; }
+    .shopping-item { display:flex; justify-content:space-between; align-items:center; margin:4px 0; padding:4px 6px; background:#fff3e0; border-radius:4px; }
+    .shopping-item label { flex:1; }
+    button.small { font-size: 12px; padding: 2px 6px; margin-left: 4px; border:none; border-radius:4px; cursor:pointer; background:#ff8a65; color:#fff; }
+    button.small:hover { background:#ff7043; }
+    button { padding:6px 10px; border:none; border-radius:4px; cursor:pointer; background:#26a69a; color:#fff; margin-left:4px; }
+    button:hover { background:#2bbbad; }
+    input { padding:6px; border-radius:4px; border:1px solid #ccc; margin-right:4px; }
+    .section { margin-bottom: 15px; }
+    .section h3 { margin-bottom:4px; color:#00796b; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="column">
+      <h2>Dishes</h2>
+      <div id="dishSections"></div>
+      <button onclick="clearAllSections()">Clear All Dishes</button>
+    </div>
+
+    <div class="column">
+      <h2>Week Plan</h2>
+      <div id="week"></div>
+      <button onclick="clearWeek()">Clear Week Plan</button>
+    </div>
+
+    <div class="column">
+      <h2>Shopping List</h2>
+      <input id="shopInput" placeholder="Add item" /> <button onclick="addShopItem()">Add</button>
+      <button onclick="copyShoppingList()">Copy List</button>
+      <div id="shopping"></div>
+      <button onclick="clearShopping()">Clear Shopping List</button>
+    </div>
+  </div>
+
+  <script>
+    const DAYS = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
+    const SECTIONS = ["Main dish","Side dish","Salad/Snack","Yummy food"];
+
+    let dishesBySection = JSON.parse(localStorage.getItem('dishesBySection')||'{}');
+    if(Object.keys(dishesBySection).length===0){SECTIONS.forEach(s=>dishesBySection[s]=[]);}
+    let weekPlan = JSON.parse(localStorage.getItem('weekPlan')||'{}');
+    let shopping = JSON.parse(localStorage.getItem('shopping')||'[]');
+
+    function save(){
+      localStorage.setItem('dishesBySection',JSON.stringify(dishesBySection));
+      localStorage.setItem('weekPlan',JSON.stringify(weekPlan));
+      localStorage.setItem('shopping',JSON.stringify(shopping));
+    }
+
+    // Dishes
+    function renderDishes(){
+      const container=document.getElementById('dishSections');
+      container.innerHTML='';
+      SECTIONS.forEach(section=>{
+        const div=document.createElement('div');div.className='section';
+        const title=document.createElement('h3');title.textContent=section; div.appendChild(title);
+        const input=document.createElement('input');input.placeholder="Add dish";
+        const btn=document.createElement('button');btn.textContent="Add";
+        btn.onclick=()=>{if(input.value.trim()){dishesBySection[section].push(input.value.trim());input.value='';save();renderDishes();}};
+        div.appendChild(input);div.appendChild(btn);
+        const ul=document.createElement('ul');ul.id='ul-'+section;
+        ul.ondragover=(e)=>{e.preventDefault();};
+        ul.ondrop=(e)=>{
+          e.preventDefault();
+          const fromSection=e.dataTransfer.getData('fromSection');
+          const index=parseInt(e.dataTransfer.getData('index'));
+          const item=dishesBySection[fromSection][index];
+          if(fromSection!==section){
+            dishesBySection[fromSection].splice(index,1);
+            dishesBySection[section].push(item);
+            save();renderDishes();
+          }
+        };
+        dishesBySection[section].forEach((d,i)=>{
+          const li=document.createElement('li');
+          li.textContent=d; li.draggable=true;
+          li.ondragstart=(e)=>{ e.dataTransfer.setData('text/plain',d); e.dataTransfer.setData('fromSection',section); e.dataTransfer.setData('index',i); };
+          const delBtn=document.createElement('button');delBtn.textContent='x';delBtn.className='small';
+          delBtn.onclick=()=>{dishesBySection[section].splice(i,1);save();renderDishes();}; li.appendChild(delBtn);
+          ul.appendChild(li);
+        }); div.appendChild(ul); container.appendChild(div);
+      });
+    }
+    function clearAllSections(){ if(confirm('Clear all dishes in all sections?')){ SECTIONS.forEach(s=>dishesBySection[s]=[]); save();renderDishes(); } }
+
+    // Week Plan
+    function renderWeek(){
+      const w=document.getElementById('week'); w.innerHTML='';
+      DAYS.forEach(day=>{
+        const div=document.createElement('div');div.className='day'; div.innerHTML=`<strong>${day}</strong>`;
+        ['Lunch','Dinner'].forEach(slot=>{
+          const slotDiv=document.createElement('div'); slotDiv.className='slot';
+          slotDiv.dataset.day=day; slotDiv.dataset.slot=slot;
+          slotDiv.ondragover=(e)=>{e.preventDefault(); slotDiv.classList.add('over');};
+          slotDiv.ondragleave=()=>slotDiv.classList.remove('over');
+          slotDiv.ondrop=(e)=>{
+            e.preventDefault(); slotDiv.classList.remove('over');
+            const dish=e.dataTransfer.getData('text/plain');
+            if(!weekPlan[day]) weekPlan[day]={}; if(!weekPlan[day][slot]) weekPlan[day][slot]=[];
+            weekPlan[day][slot].push(dish); save();renderWeek();
+          };
+          const items = weekPlan[day]?.[slot] || [];
+          slotDiv.innerHTML = `<div><strong>${slot}</strong>: ${items.join(', ')}</div>`;
+          if(items.length){
+            const clearBtn=document.createElement('button'); clearBtn.textContent='Clear'; clearBtn.className='small';
+            clearBtn.onclick=()=>{weekPlan[day][slot]=[]; save();renderWeek();}; slotDiv.appendChild(clearBtn);
+          } div.appendChild(slotDiv);
+        }); w.appendChild(div);
+      });
+    }
+    function clearWeek(){ if(confirm('Clear entire week plan?')){ weekPlan={}; save(); renderWeek(); } }
+
+    // Shopping List
+    function renderShopping(){
+      const div=document.getElementById('shopping'); div.innerHTML='';
+      shopping.forEach((item,i)=>{
+        const row=document.createElement('div'); row.className='shopping-item';
+        row.innerHTML=`<label><input type='checkbox' class='shop-checkbox'> ${item}</label><button class='small' onclick="removeShopItem(${i})">x</button>`;
+        div.appendChild(row);
+      });
+    }
+    function addShopItem(){
+      const val=document.getElementById('shopInput').value.trim();
+      if(val){shopping.push(val); save(); renderShopping();} document.getElementById('shopInput').value='';
+    }
+    function removeShopItem(i){ shopping.splice(i,1); save(); renderShopping(); }
+    function clearShopping(){ if(confirm('Clear shopping list?')){ shopping=[]; save(); renderShopping(); } }
+    function copyShoppingList(){
+      const checkboxes = document.querySelectorAll('#shopping .shop-checkbox');
+      const items = [];
+      checkboxes.forEach((cb,i)=>{ if(!cb.checked) items.push(shopping[i]); });
+      navigator.clipboard.writeText(items.join('\n')).then(()=>{alert('Unchecked items copied!');});
+    }
+
+    // init
+    renderDishes(); renderWeek(); renderShopping();
+  </script>
+</body>
+</html>
